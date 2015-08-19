@@ -16,12 +16,12 @@
 // get the 
 
 #include "stdafx.h"
+#include "mlbFunctions.h"
 #include <iostream>
 #include <fstream>
 #include <string>
-#include "PlayerInfo.h"
 #include <vector>
-#include<algorithm>
+#include <algorithm>
 #include <Windows.h>
 #include <istream>
 #include <iomanip>
@@ -30,13 +30,12 @@
 #include <curl/easy.h>
 
 
+
 using namespace std;
 
 void getWebPage(char* s, char * temp);
 size_t write_data(void *ptr, size_t size, size_t nmemb, FILE *stream);
-std::vector<PlayerInfo> LineUpData(string x);// inputs Possible players to pick from into a vector
 std::vector<PlayerInfo> InputPlayers(std::vector<PlayerInfo> LU);// Takes Human picks and puts them into a vector and returns
-void setHAgames(string LUnumber);
 
 //Notes to self on what to look at before picking
 void GeneralInfo();
@@ -59,12 +58,106 @@ void LiveOdds(int x);
 int _tmain(int argc, _TCHAR* argv[])
 {
 	////////Settings///////////
-	string LUnumber = "13"; // Current Line UP to import ex. LU6.txt 
+	string LUnumber = "1021"; // Current Line UP to import ex. LU6.txt 
 	int sportOdds = 3; // sport to get 1 - nba | 2 - mlb | 3-nhl
 	GeneralInfo();
+
 	//////////////////////////////////////////////////////////////
+	////////// color ////////////////////////
+	HANDLE h = GetStdHandle ( STD_OUTPUT_HANDLE );
+	WORD wOldColorAttrs;
+	CONSOLE_SCREEN_BUFFER_INFO csbiInfo;
+	GetConsoleScreenBufferInfo(h, &csbiInfo);
+	wOldColorAttrs = csbiInfo.wAttributes;
+	//////////////////////////////////////////
+	BallParkParse();
+
+	//LoadGameOdds();
+	//vector<mlbPlayer> temp = 
+	//vector<mlbPlayer> tempMLB = parseData("APR 07");
+		
+	vector<PlayerInfo> playerLU = LineUpData(LUnumber);
+	
+	vector<mlbPlayer> BvPinfo = BvPParse(); //parse data from BvP
+
+	////////Testing Area/////////////
+	string t;
+	cin >> t;
+	
+	if(t.compare("y")==0){
+		MLBProjectionsCSV();
+		CalcPlayerProjections(BvPinfo,BallParkParse());
+	}
+	/////////////////////////////////
 
 
+	string tempData = "";
+	string gottenData = "";
+	string x ="";
+	int zz = 1;
+	cout << "Run BvP and Recent player performance";
+	cin >> x;
+///////////////////////////////Recent Player Performance/////////////////////////////////////////////////////////////////////////////////////
+	
+	if(x.compare("y")==0){
+		////THis is where the games are
+		for(int x = 18; x<=20;x++){
+			vector<mlbPlayer> tempMLB = parseData(x);
+			for(std::vector<PlayerInfo>::iterator LU = playerLU.begin(); LU != playerLU.end(); LU++){
+				if(LU->getPos().compare("SP")==0){}
+				else if(LU->getPos().compare("RP")==0){}
+				else{
+					for (std::vector<mlbPlayer>::iterator it = tempMLB.begin() ; it != tempMLB.end(); ++it){
+						if(LU->getName().compare(it->getName())==0){
+							gottenData = LU->getprevGameData();
+							tempData = "| ";
+							tempData = tempData + it->getOppt() + " ";
+							tempData = tempData + std::to_string((int)it->getDkpts());
+							tempData = tempData + " | ";
+							gottenData = gottenData + tempData;
+							LU->setprevGameData(gottenData);
+							gottenData ="";
+							LU->setTeam1(it->getTeam());
+							LU->setTeam2(it->getOppt());
+						}
+					}
+				}
+			}
+			zz++;
+		}
+		
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+		//attaching BvP info to PlayerLine-Up
+		for(std::vector<PlayerInfo>::iterator LU = playerLU.begin(); LU != playerLU.end(); LU++){
+			for (std::vector<mlbPlayer>::iterator it = BvPinfo.begin() ; it != BvPinfo.end(); ++it){
+				if(LU->getName().compare(it->getName())==0){
+					LU->setBvPinfo(it->getBvP());
+					LU->setAtBats(it->getAtBats());
+				}
+			}
+		}
+
+	
+		std::sort(playerLU.begin(), playerLU.end(),PlayerInfo::comparePOS());
+		//  || LU->getTeam1().compare("COL")!=0 
+		for(std::vector<PlayerInfo>::iterator LU = playerLU.begin(); LU != playerLU.end(); LU++){
+			if(LU->getPos().compare("SP")==0 || LU->getPos().compare("RP")==0  ){}
+			else{
+				cout <<LU->getSalary()<<" " << LU->getPos() << " "<<LU->getTeam1() <<" "<<LU->getName() <<  " ";
+				SetConsoleTextAttribute ( h,  FOREGROUND_BLUE  | FOREGROUND_INTENSITY | 12 );
+				cout << LU->getprevGameData() << " || ";
+				SetConsoleTextAttribute ( h, wOldColorAttrs);
+
+				if(LU->getAtBats() > 10){
+					SetConsoleTextAttribute ( h,  FOREGROUND_GREEN  | FOREGROUND_INTENSITY | BACKGROUND_INTENSITY );
+				}
+					cout << "AB: " << LU->getAtBats() << LU->getBvPinfo() <<endl;
+				SetConsoleTextAttribute ( h, wOldColorAttrs);
+			}
+		}
+	}
 	///////////////Testing Function/projects in work///////////////////
 	//SalaryDiffernce(LineUpData("1"),LineUpData("2"));
 	///////////////////////////////////////////////////////////////////
@@ -73,113 +166,6 @@ int _tmain(int argc, _TCHAR* argv[])
 	
 	return 0;
 }
-
-
-//Parse info into vector and class structure from LineUp text file from DraftKings
-std::vector<PlayerInfo> LineUpData(string x){
-	//PlayerInfo temp;
-	string line;
-	string fileNumber = x;
-	string fileName = "C:\\progData\\LineUps\\LU"  + fileNumber + ".txt";
-	ifstream infile(fileName);
-	string data = "";
-	int pos = 0;
-	std::vector<PlayerInfo> LineUPS;
-
-	while(getline(infile,line)){
-		// get position
-		PlayerInfo* temp = new PlayerInfo();
-		for(int x = 0; x< line.length(); x++){
-			if(line[x]!=' ' && line[x]!='\t'){
-				data = data + line[x];
-			}
-			else{
-				pos = x;
-				x = x + line.length();
-			}
-		}
-			temp->setPos(data);
-			data = "";
-			/// first/lastName
-		for(int x = pos+1;x < line.length(); x++){
-			if(line[x]!='\t'){
-				data = data + line[x];
-			}
-			else{
-				pos = x;
-				x = x + line.length();
-			}
-		}
-			temp->setName(data);
-			data = "";
-			//// Salary
-			for(int x = pos+1;x < line.length(); x++){
-			if(line[x]!='\t'){
-				data = data + line[x];
-			}
-			else{
-				pos = x;
-				x = x + line.length();
-			}
-		}
-			temp->setSalary(atoi(data.c_str()));
-			data = "";
-			//Team1...
-			for(int x = pos+1;x < line.length(); x++){
-			if(line[x]!='@' ){
-				data = data + line[x];
-			}
-			else{
-				pos = x;
-				x = x + line.length();
-			}
-		}
-			temp->setTeam1(data);
-			data = "";
-			//Team2...
-			for(int x = pos+1;x < line.length(); x++){
-			if(line[x]!=' ' ){
-				data = data + line[x];
-			}
-			else{
-				pos = x;
-				x = x + line.length();
-			}
-		}
-			temp->setTeam2(data);
-			data = "";
-			//time...
-			for(int x = pos+1;x < line.length(); x++){
-			if(line[x]!='\t' ){
-				data = data + line[x];
-			}
-			else{
-				pos = x;
-				x = x + line.length();
-			}
-		}
-			temp->setMatchUP(data);
-			data = "";
-			//get AVGPTS
-			for(int x = pos+1;x < line.length(); x++){
-			if(line[x]!='\t'){
-				data = data + line[x];
-			}
-			else{
-				pos = x;
-				x = x + line.length();
-			}
-		}
-			temp->setAVGPTS(atof(data.c_str()));
-			data = "";
-
-			LineUPS.push_back(*temp);
-	}
-
-	
-	return LineUPS;
-}
-
 
 
 std::vector<PlayerInfo> InputPlayers(std::vector<PlayerInfo> LU){
@@ -493,6 +479,8 @@ void LiveOdds(int x){
 	GetConsoleScreenBufferInfo(h, &csbiInfo);
 	wOldColorAttrs = csbiInfo.wAttributes;
 	//////////////////////////////////////////
+	ofstream oddsOut;
+	oddsOut.open("C:\\progData\\odds",std::ofstream::out);
 
 	string sporthtml ="";
 	if (x==1)
@@ -539,6 +527,7 @@ void LiveOdds(int x){
 					cout << "|";
 					SetConsoleTextAttribute ( h,  FOREGROUND_BLUE  | FOREGROUND_INTENSITY | 12 );
 					cout << " " <<dataOdds << " ";
+					oddsOut << " " <<dataOdds << " ";
 					if(count == 4){
 						openSpread = atof(dataOdds.c_str());
 					}
@@ -550,26 +539,32 @@ void LiveOdds(int x){
 					if(atof(dataOdds.c_str()) > openSpread){
 						SetConsoleTextAttribute ( h,  FOREGROUND_GREEN  | 0 | 0 );
 						cout << "| " <<dataOdds;
+						oddsOut << "| " <<dataOdds;
 					}
 					else if(atoi(dataOdds.c_str()) < openSpread){
 						SetConsoleTextAttribute ( h,  FOREGROUND_RED | FOREGROUND_INTENSITY | 12 );
 						cout << "| " <<dataOdds;
+						oddsOut << "| " <<dataOdds;
 					}
 					else{
 						cout << "| " <<dataOdds;
+						oddsOut << "| " <<dataOdds;
 					}
 				}
 				else if(count > 5 ){
 					if(atof(dataOdds.c_str()) > openOU){
 						SetConsoleTextAttribute ( h,  FOREGROUND_GREEN  | 0 | 0 );
 						cout << "| " <<dataOdds;
+						oddsOut << "| " <<dataOdds;
 					}
 					else if(atoi(dataOdds.c_str()) < openOU){
 						SetConsoleTextAttribute ( h,  FOREGROUND_RED  | FOREGROUND_INTENSITY | 12 );
 						cout << "| " <<dataOdds;
+						oddsOut << "| " <<dataOdds;
 					}
 					else{
 						cout << "| " <<dataOdds;
+						oddsOut << "| " <<dataOdds;
 					}
 				}
 
@@ -580,6 +575,7 @@ void LiveOdds(int x){
 
 		if(end > 0){
 			cout << endl;
+			oddsOut << endl;
 			dataBlock = false;
 			count = 0;
 		}
@@ -594,6 +590,7 @@ void LiveOdds(int x){
 				}
 			}
 		cout << endl <<data;
+		oddsOut << endl <<data;
 		data = "";
 		}
 
@@ -602,26 +599,3 @@ void LiveOdds(int x){
 
 }
 
-
-// takes todays LU number and calls LineUpData to initiate a starting point. Then goes back 4 LineUps and if the players existed in that line up it finds out if they
-// were home or away and adds A or H to the player record. If they DId not play ad X. so if a player played 4 out of 5 games it could look something like this AAXHH
-// meaning Away/Aways/No Play//HOME/HOME
-void setHAgames(string LUnumber){ // last 3 games
-	
-
-	std::vector<PlayerInfo> xLU;
-	std::vector<PlayerInfo> x1LU;
-	std::vector<PlayerInfo> x2LU;
-	std::vector<PlayerInfo> x3LU;
-	std::vector<PlayerInfo> x4LU;
-
-	int todayLU = atoi(LUnumber.c_str());
-
-	xLU = LineUpData(LUnumber);
-	
-	//x4LU = LineUpData(`)
-
-
-
-
-}
